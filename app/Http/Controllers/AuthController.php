@@ -22,43 +22,25 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        $user = User::where('email', $credentials['email'])->first();
+        if (Auth::attempt($credentials)) {
+            $request->session()->regenerate();
 
-        if ($user) {
-            if (Hash::check($credentials['password'], $user->password) || $user->password === $credentials['password']) {
-                if ($user->password === $credentials['password']) {
-                    $user->password = Hash::make($credentials['password']);
-                    $user->save();
-                }
-            } else {
-                return back()->withErrors([
-                    'email' => 'La contraseña no coincide con nuestros registros.',
-                ])->onlyInput('email');
-            }
-        } else {
-            $user = User::create([
-                'name' => $request->input('name', $credentials['email']),
-                'email' => $credentials['email'],
-                'password' => Hash::make($credentials['password']),
-                'role' => 'admin',
-                'status' => 'active',
+            // Log Activity
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'user_email' => Auth::user()->email,
+                'action' => 'login',
+                'description' => 'Inicio de sesión exitoso',
+                'type' => 'auth',
+                'ip_address' => $request->ip()
             ]);
+
+            return redirect()->intended('dashboard');
         }
 
-        Auth::login($user);
-
-        $request->session()->regenerate();
-
-        ActivityLog::create([
-            'user_id' => $user->id,
-            'user_email' => $user->email,
-            'action' => 'login',
-            'description' => 'Inicio de sesión exitoso',
-            'type' => 'auth',
-            'ip_address' => $request->ip()
-        ]);
-
-        return redirect()->intended('dashboard');
+        return back()->withErrors([
+            'email' => 'Las credenciales proporcionadas no coinciden con nuestros registros.',
+        ])->onlyInput('email');
     }
 
     public function showRegistrationForm()
